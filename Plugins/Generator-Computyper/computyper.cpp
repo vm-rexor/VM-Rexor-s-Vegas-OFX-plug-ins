@@ -65,6 +65,7 @@ protected :
   RGBAValue  _color2;
   Int2DValue _gridOffset;
   std::string  _displText;
+  std::string  _fontName;
   //double       _progress;
 
 public :
@@ -99,6 +100,9 @@ public :
   /** @brief set text */
   void setText(std::string text) { _displText = text; }
 
+  /** @brief set font name */
+  void setFontName(std::string text) { _fontName = text; }
+
   /** @brief set progress level */
   //void setProgress(double progress) { _progress = progress; }
 
@@ -117,183 +121,136 @@ public :
   void multiThreadProcessImages(OfxRectI procWindow)
   {
     // push pixels
-    for(int y = procWindow.y1; y < procWindow.y2; y++) 
-    {
-      if(_effect.abort()) break;
 
-      PIX *dstPix = (PIX *) _dstImg->getPixelAddress(procWindow.x1, y);
-      int gy = (y + _gridOffset.y) / _tileheight;
 
-      for(int x = procWindow.x1; x < procWindow.x2; x++) 
+      OfxRectI l_imgbounds = _dstImg->getBounds();
+
+      ULONG uXSize = l_imgbounds.x2 - l_imgbounds.x1;
+      ULONG uYSize = l_imgbounds.y2 - l_imgbounds.y1;
+
+      bool  l_boldfont = false;
+      bool  l_italicfont = false;
+      bool  l_underfont = false;
+      char l_fontName[1024];
+      float l_rectWidth = 0.5;
+      float l_rectHeight = 0.5;
+      float l_rectTop = (float)_gridOffset.y / 100.0f;
+      float l_rectLeft = (float)_gridOffset.x / 100.0f;
+
+      char l_destTextBuf[4096];
+
+      strcpy(l_fontName, _fontName.c_str());
+
+      strcpy(l_destTextBuf, _displText.c_str());
+
+      // display prepared text
+      BITMAPINFO l_binff;
+      memset(&l_binff.bmiHeader, 0, sizeof(BITMAPINFOHEADER));
+      l_binff.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+      l_binff.bmiHeader.biPlanes = 1;
+      l_binff.bmiHeader.biWidth = uXSize;
+      l_binff.bmiHeader.biHeight = uYSize + 2;
+      l_binff.bmiHeader.biBitCount = 32;
+
+      HDC l_pdc = ::GetDC(0);
+      HDC l_tdc = CreateCompatibleDC(l_pdc);
+
+
+
+      BYTE* pBase = NULL;
+      HBITMAP TmpBmp = CreateDIBSection(l_pdc, &l_binff, DIB_RGB_COLORS, (void**)&pBase, 0, 0);
+      HGDIOBJ TmpObj = SelectObject(l_tdc, TmpBmp);
+
+      // get  font size
+      int l_fontSize = (int)(_tilewidth);
+      // in case zero font size
+      if (l_fontSize <= 0)
+          l_fontSize = 1;
+
+
+      HFONT fontNew = CreateFont(
+          l_fontSize, // height (negative means use character heights
+          0, // width (0 means use default)
+          0, // escapement (0 means none)
+          0, // orientation (0 means none)
+          (l_boldfont) ? FW_NORMAL : FW_BOLD, // "boldness" of font
+          l_italicfont, // italic?  true or false
+          l_underfont, // underline? true or false
+          false, // strikeout?  true or false
+          DEFAULT_CHARSET, // desired character set
+          OUT_TT_PRECIS, // output precision - use TrueType only
+          CLIP_DEFAULT_PRECIS, // clip precision - use default
+          ANTIALIASED_QUALITY, // proof quality
+          DEFAULT_PITCH | FF_DONTCARE, // pitch and family
+          l_fontName // name of font face desired
+      );
+
+
+      HFONT oldfont = (HFONT)SelectObject(l_tdc, fontNew);
+
+      COLORREF oldbackground = SetBkColor(l_tdc, COLORREF(RGB(0, 0, 0)));
+      COLORREF oldcolor;
+      oldcolor = SetTextColor(l_tdc, COLORREF(RGB(255, 255, 255)));
+      int oldbkmode = SetBkMode(l_tdc, TRANSPARENT);
+
+
+
+      RECT Regiontymcz;
+      Regiontymcz.top = (LONG)(uYSize - _gridOffset.y);
+      Regiontymcz.left = (LONG)(_gridOffset.x);
+      Regiontymcz.bottom = Regiontymcz.top + (LONG)(uYSize);
+      Regiontymcz.right = Regiontymcz.left + (LONG)(uXSize);
+
+      int stat = DrawText(l_tdc, l_destTextBuf, strlen(l_destTextBuf), &Regiontymcz, DT_NOCLIP);
+
+      long l_ssx = l_binff.bmiHeader.biWidth;
+
+
+      for (int y = procWindow.y1; y < procWindow.y2; y++)
       {
-          int gx = (x + _gridOffset.x) / _tilewidth;
-          int g = (gx + gy) % 2;
-          if(g == 0)
+          if (_effect.abort()) break;
+
+          PIX* dstPix = (PIX*)_dstImg->getPixelAddress(procWindow.x1, y);
+
+          for (int x = procWindow.x1; x < procWindow.x2; x++)
           {
-              if(max == 1) // implies floating point, so don't clamp
+              //            BYTE  bAlfa = pBase[((uYSize - y) * l_ssx * 4) + (x * 4)];
+              BYTE  bAlfa = pBase[(y * l_ssx * 4) + (x * 4)];
+
+              float ualfa = (float)(bAlfa) / 255.0f;
+              if (max == 1) // implies floating point, so don't clamp
               {
-                  dstPix[0] = (PIX) _color1.r;
-                  dstPix[1] = (PIX) _color1.g;
-                  dstPix[2] = (PIX) _color1.b;
-                  dstPix[3] = (PIX) _color1.a;
+                  // bgr space
+                  dstPix[0] = (PIX)((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa)));
+                  dstPix[1] = (PIX)((_color2.g * ualfa) + (_color1.g * (1.0f - ualfa)));
+                  dstPix[2] = (PIX)((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa)));
+                  dstPix[3] = (PIX)((_color2.a * ualfa) + (_color1.a * (1.0f - ualfa)));
               }
               else
               {
-                  dstPix[0] = (PIX) (_color1.r * max);
-                  dstPix[1] = (PIX) (_color1.g * max);
-                  dstPix[2] = (PIX) (_color1.b * max);
-                  dstPix[3] = (PIX) (_color1.a * max);
+                  dstPix[0] = (PIX)(((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa))) * max);
+                  dstPix[1] = (PIX)(((_color2.g * ualfa) + (_color1.g * (1.0f - ualfa))) * max);
+                  dstPix[2] = (PIX)(((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa))) * max);
+                  dstPix[3] = (PIX)(((_color2.a * ualfa) + (_color1.a * (1.0f - ualfa))) * max);
               }
+
+              dstPix += nComponents;
           }
-          else
-          {
-              if(max == 1) // implies floating point, so don't clamp
-              {
-                  dstPix[0] = (PIX) _color2.r;
-                  dstPix[1] = (PIX) _color2.g;
-                  dstPix[2] = (PIX) _color2.b;
-                  dstPix[3] = (PIX) _color2.a;
-              }
-              else
-              {
-                  dstPix[0] = (PIX) (_color2.r * max);
-                  dstPix[1] = (PIX) (_color2.g * max);
-                  dstPix[2] = (PIX) (_color2.b * max);
-                  dstPix[3] = (PIX) (_color2.a * max);
-              }
-          }
-          dstPix += nComponents;
       }
-    }
-
-    OfxRectI l_imgbounds = _dstImg->getBounds();
-
-    ULONG uXSize = l_imgbounds.x2 - l_imgbounds.x1;
-    ULONG uYSize = l_imgbounds.y2 - l_imgbounds.y1;
-
-    float l_propfontSize=0.1f;
-    bool  l_boldfont = false;
-    bool  l_italicfont = false;
-    bool  l_underfont = false;
-    char l_fontName[] = "Arial";
-    float l_rectWidth = 0.5;
-    float l_rectHeight = 0.5;
-    float l_rectTop = 0.1;
-    float l_rectLeft = 0.1;
-
-    char l_destTextBuf[] = "To jest tekst testowy";
-
-
-    // display prepared text
-    BITMAPINFO l_binff;
-    memset(&l_binff.bmiHeader, 0, sizeof(BITMAPINFOHEADER));
-    l_binff.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    l_binff.bmiHeader.biPlanes = 1;
-    l_binff.bmiHeader.biWidth = uXSize;
-    l_binff.bmiHeader.biHeight = uYSize + 2;
-    l_binff.bmiHeader.biBitCount = 32;
-
-    HDC l_pdc = ::GetDC(0);
-    HDC l_tdc = CreateCompatibleDC(l_pdc);
 
 
 
-    BYTE* pBase = NULL;
-    HBITMAP TmpBmp = CreateDIBSection(l_pdc, &l_binff, DIB_RGB_COLORS, (void**)&pBase, 0, 0);
-    HGDIOBJ TmpObj = SelectObject(l_tdc, TmpBmp);
+      SelectObject(l_tdc, oldfont);
+      SelectObject(l_tdc, TmpObj);
+      SetBkColor(l_tdc, oldbackground);
+      SetBkMode(l_tdc, oldbkmode);
+      SetTextColor(l_tdc, oldcolor);
 
-    // get percentage font size
-    int l_fontSize = (int)((float)uXSize * l_propfontSize);
-    // in case zero font size
-    if (l_fontSize <= 0)
-        l_fontSize = 1;
-
-
-    HFONT fontNew = CreateFont(
-        l_fontSize, // height (negative means use character heights
-        0, // width (0 means use default)
-        0, // escapement (0 means none)
-        0, // orientation (0 means none)
-        (l_boldfont) ? FW_NORMAL : FW_BOLD, // "boldness" of font
-        l_italicfont, // italic?  true or false
-        l_underfont, // underline? true or false
-        false, // strikeout?  true or false
-        DEFAULT_CHARSET, // desired character set
-        OUT_TT_PRECIS, // output precision - use TrueType only
-        CLIP_DEFAULT_PRECIS, // clip precision - use default
-        ANTIALIASED_QUALITY, // proof quality
-        DEFAULT_PITCH | FF_DONTCARE, // pitch and family
-        l_fontName // name of font face desired
-    );
-
-
-    HFONT oldfont = (HFONT)SelectObject(l_tdc, fontNew);
-
-    COLORREF oldbackground = SetBkColor(l_tdc, COLORREF(RGB(0, 0, 0)));
-    COLORREF oldcolor;
-    oldcolor = SetTextColor(l_tdc, COLORREF(RGB(255, 255, 255)));
-    int oldbkmode = SetBkMode(l_tdc, TRANSPARENT);
-
-
-
-    RECT Regiontymcz;
-    Regiontymcz.top = (LONG)((float)uYSize * (((100.0f - l_rectHeight) / 2.0f) / 100.0f));
-    Regiontymcz.left = (LONG)((float)uXSize * (((100.0f - l_rectWidth) / 2.0f) / 100.0f));
-    Regiontymcz.bottom = (LONG)((float)uYSize - ((float)uYSize * (((100.0f - l_rectHeight) / 2.0f) / 100.0f)));
-    Regiontymcz.right = (LONG)((float)uXSize - ((float)uXSize * (((100.0f - l_rectWidth) / 2.0f) / 100.0f)));
-
-
-    Regiontymcz.top += (LONG)(l_rectTop * (float)(Regiontymcz.bottom - Regiontymcz.top));
-    Regiontymcz.left += (LONG)(l_rectLeft * (float)(Regiontymcz.right - Regiontymcz.left));
-
-    int stat = DrawText(l_tdc, l_destTextBuf, strlen(l_destTextBuf), &Regiontymcz, DT_NOCLIP);
-         
-    long l_ssx = l_binff.bmiHeader.biWidth;
-
-
-    for (int y = procWindow.y1; y < procWindow.y2; y++)
-    {
-        if (_effect.abort()) break;
-
-        PIX* dstPix = (PIX*)_dstImg->getPixelAddress(procWindow.x1, y);
-
-        for (int x = procWindow.x1; x < procWindow.x2; x++)
-        {
-            BYTE  bAlfa = pBase[((uYSize - y) * l_ssx * 4) + (x * 4)];
-
-            float ualfa = (float)(bAlfa) / 255.0f;
-            if (max == 1) // implies floating point, so don't clamp
-            {
-                dstPix[0] = (PIX)((_color1.r * ualfa) + (_color2.r * (1.0f - ualfa)));
-                dstPix[1] = (PIX)((_color1.g * ualfa) + (_color2.g * (1.0f - ualfa)));
-                dstPix[2] = (PIX)((_color1.b * ualfa) + (_color2.b * (1.0f - ualfa)));
-                dstPix[3] = (PIX)((_color1.a * ualfa) + (_color2.a * (1.0f - ualfa)));
-            }
-            else
-            {
-                dstPix[0] = (PIX)(((_color1.r * ualfa) + (_color2.r * (1.0f - ualfa))) * max);
-                dstPix[1] = (PIX)(((_color1.g * ualfa) + (_color2.g * (1.0f - ualfa))) * max);
-                dstPix[2] = (PIX)(((_color1.b * ualfa) + (_color2.b * (1.0f - ualfa))) * max);
-                dstPix[3] = (PIX)(((_color1.a * ualfa) + (_color2.a * (1.0f - ualfa))) * max);
-            }
-
-            dstPix += nComponents;
-        }
-    }
-
-
-
-    SelectObject(l_tdc, oldfont);
-    SelectObject(l_tdc, TmpObj);
-    SetBkColor(l_tdc, oldbackground);
-    SetBkMode(l_tdc, oldbkmode);
-    SetTextColor(l_tdc, oldcolor);
-
-    SelectObject(l_tdc, TmpObj);
-    DeleteObject(fontNew);
-    DeleteObject(TmpBmp);
-    DeleteDC(l_tdc);
-    ReleaseDC(0, l_pdc);
+      SelectObject(l_tdc, TmpObj);
+      DeleteObject(fontNew);
+      DeleteObject(TmpBmp);
+      DeleteDC(l_tdc);
+      ReleaseDC(0, l_pdc);
 
 
 
@@ -422,54 +379,6 @@ public :
   void multiThreadProcessImages(OfxRectI procWindow)
   {
     // push pixels
-    for(int y = procWindow.y1; y < procWindow.y2; y++) 
-    {
-      if(_effect.abort()) break;
-
-      PIX *dstPix = (PIX *) _dstImg->getPixelAddress(procWindow.x1, y);
-      int gy = (y + _gridOffset.y) / _tileheight;
-
-      for(int x = procWindow.x1; x < procWindow.x2; x++) 
-      {
-          int gx = (x + _gridOffset.x) / _tilewidth;
-          int g = (gx + gy) % 2;
-          if(g == 0)
-          {
-              if(max == 1) // implies floating point, so don't clamp
-              {
-                  dstPix[0] = (PIX) _color1.b;
-                  dstPix[1] = (PIX) _color1.g;
-                  dstPix[2] = (PIX) _color1.r;
-                  dstPix[3] = (PIX) _color1.a;
-              }
-              else
-              {
-                  dstPix[0] = (PIX) (_color1.b * max);
-                  dstPix[1] = (PIX) (_color1.g * max);
-                  dstPix[2] = (PIX) (_color1.r * max);
-                  dstPix[3] = (PIX) (_color1.a * max);
-              }
-          }
-          else
-          {
-              if(max == 1) // implies floating point, so don't clamp
-              {
-                  dstPix[0] = (PIX) _color2.b;
-                  dstPix[1] = (PIX) _color2.g;
-                  dstPix[2] = (PIX) _color2.r;
-                  dstPix[3] = (PIX) _color2.a;
-              }
-              else
-              {
-                  dstPix[0] = (PIX) (_color2.b * max);
-                  dstPix[1] = (PIX) (_color2.g * max);
-                  dstPix[2] = (PIX) (_color2.r * max);
-                  dstPix[3] = (PIX) (_color2.a * max);
-              }
-          }
-          dstPix += nComponents;
-      }
-    }
 
     OfxRectI l_imgbounds = _dstImg->getBounds();
 
@@ -479,32 +388,17 @@ public :
     bool  l_boldfont = false;
     bool  l_italicfont = false;
     bool  l_underfont = false;
-    char l_fontName[] = "Arial";
+    char l_fontName[1024];
     float l_rectWidth = 0.5;
     float l_rectHeight = 0.5;
     float l_rectTop = (float)_gridOffset.y /100.0f;
     float l_rectLeft = (float)_gridOffset.x /100.0f;
 
-    //char l_destTextBuf[] = "To jest tekst testowy";
-
-
-    //const char* l_destTextBuf = _displText.c_str();
-
     char l_destTextBuf[4096];
 
+    strcpy(l_fontName, _fontName.c_str());
+
     strcpy(l_destTextBuf, _displText.c_str());
-//    if (strlen(l_destTextBuf) == 1)
-//    {
-//        sprintf(l_destTextBuf, "%x", _displText[0]);
-//    }
-//    if (strlen(l_destTextBuf) == 2)
-//    {
-//        sprintf(l_destTextBuf, "%x %x", _displText[0], _displText[1]);
-//        //strcpy(l_destTextBuf, "Type text..¹ê³ñóœŸ¿");
-//    }
-
-    //strcpy(l_destTextBuf, "Type text...");
-
 
     // display prepared text
     BITMAPINFO l_binff;
@@ -583,16 +477,17 @@ public :
             float ualfa = (float)(bAlfa) / 255.0f;
             if (max == 1) // implies floating point, so don't clamp
             {
-                dstPix[0] = (PIX)((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa)));
+                // bgr space
+                dstPix[0] = (PIX)((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa)));
                 dstPix[1] = (PIX)((_color2.g * ualfa) + (_color1.g * (1.0f - ualfa)));
-                dstPix[2] = (PIX)((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa)));
+                dstPix[2] = (PIX)((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa)));
                 dstPix[3] = (PIX)((_color2.a * ualfa) + (_color1.a * (1.0f - ualfa)));
             }
             else
             {
-                dstPix[0] = (PIX)(((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa))) * max);
+                dstPix[0] = (PIX)(((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa))) * max);
                 dstPix[1] = (PIX)(((_color2.g * ualfa) + (_color1.g * (1.0f - ualfa))) * max);
-                dstPix[2] = (PIX)(((_color2.b * ualfa) + (_color1.b * (1.0f - ualfa))) * max);
+                dstPix[2] = (PIX)(((_color2.r * ualfa) + (_color1.r * (1.0f - ualfa))) * max);
                 dstPix[3] = (PIX)(((_color2.a * ualfa) + (_color1.a * (1.0f - ualfa))) * max);
             }
 
@@ -639,8 +534,9 @@ protected :
   OFX::StringParam   *dispText_;
   OFX::StringParam   *cursor_;
   OFX::DoubleParam   * progress_;
-  OFX::DoubleParam* blinkfreq_;
-  
+  OFX::DoubleParam   * blinkfreq_;
+  OFX::StringParam   * fontName_;
+
   
 
 public :
@@ -658,6 +554,7 @@ public :
     , cursor_(0)
     , progress_(0)
       , blinkfreq_(0)
+      , fontName_(0)
   {
     dstClip_  = fetchClip("Output");
     width_                = fetchDoubleParam("Width");
@@ -669,6 +566,9 @@ public :
     cursor_               = fetchStringParam("Cursor");
     progress_             = fetchDoubleParam("Progress");
     blinkfreq_            = fetchDoubleParam("BlinkFreq");
+
+    fontName_             = fetchStringParam("FontName");
+
   }
 
   /* Override the render */
@@ -737,16 +637,8 @@ CompuTypePlugin::setupAndProcess(CompuTypeGeneratorBase &processor, const OFX::R
   std::string l_cursor;
   cursor_->getValueAtTime(args.time, l_cursor);
 
-  l_text = formPLCharacters(l_text);
-//
-  //char buffer[256];
-  //sprintf(buffer, "%f.5", args.time);
-  //l_text += std::string(buffer);
-//
-
-  
-
-
+  l_text = formPLCharacters(l_text);  // correct polish language characters
+ 
   double l_progress = progress_->getValueAtTime(args.time);
   size_t destLen = (size_t)(fabs((double)(l_text.size()) * l_progress));
   
@@ -771,6 +663,13 @@ CompuTypePlugin::setupAndProcess(CompuTypeGeneratorBase &processor, const OFX::R
           processor.setText(l_text.substr(0, destLen) + l_cursor);
       }
   }
+  std::string l_fntame;
+  fontName_->getValueAtTime(args.time, l_fntame);
+  if (l_fntame.size() == 0)
+  {
+      l_fntame = "Arial";
+  }
+  processor.setFontName(l_fntame);
 //  processor.setProgress(l_progress);
   // Call the base class process member, this will call the derived templated process code
   processor.process();
@@ -1119,6 +1018,15 @@ void CompuTypeExamplePluginFactory::describeInContext(OFX::ImageEffectDescriptor
   gridPositionParam->setRange(0.0, 0.0, 1.0, 1.0);
   gridPositionParam->setAnimates(true); // can animate
 
+  StringParamDescriptor* fontName = desc.defineStringParam("FontName");
+  fontName->setLabels("Font Name", "Font Name", "Font Name");
+  fontName->setScriptName("DispText");
+  fontName->setHint("Font name.");
+  fontName->setDefault("Arial");
+  fontName->setStringType(eStringTypeSingleLine);
+  fontName->setAnimates(true); // can animate
+
+
   StringParamDescriptor* textParam = desc.defineStringParam("DispText");
   textParam->setLabels("Text", "Text", "Text");
   textParam->setScriptName("DispText");
@@ -1148,9 +1056,9 @@ void CompuTypeExamplePluginFactory::describeInContext(OFX::ImageEffectDescriptor
 
 
   DoubleParamDescriptor* progressParam = desc.defineDoubleParam("Progress");
-  progressParam->setLabels("Size", "Size", "Size");
-  progressParam->setScriptName("width");
-  progressParam->setHint("Font size.");
+  progressParam->setLabels("Progress", "Progress", "Progress");
+  progressParam->setScriptName("progress");
+  progressParam->setHint("Typing progress.");
   progressParam->setDefault(1.0);
   progressParam->setRange(0, 1);
   progressParam->setIncrement(0.1);
@@ -1161,6 +1069,7 @@ void CompuTypeExamplePluginFactory::describeInContext(OFX::ImageEffectDescriptor
   PageParamDescriptor *page = desc.definePageParam("Controls");
   page->addChild(*widthParam);
   page->addChild(*heightParam);
+  page->addChild(*fontName);
   page->addChild(*color1Param);
   page->addChild(*color2Param);
   page->addChild(*gridPositionParam);
