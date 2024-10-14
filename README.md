@@ -1,5 +1,9 @@
 OFX plug-ins for Sony Vegas NLE
 
+Now available: 
+Star Dots
+CompuTyper
+
 How to build:
 
 1) download Video Plug-In Development Kit (OFX) for Vegas: https://web.archive.org/web/20140122213530/http://www.sonycreativesoftware.com/download/devkits
