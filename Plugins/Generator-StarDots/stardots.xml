@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+This XML file is an example for a hypothetical OFX plugin 'someplugin'. It is there to illustrate the basics. 
+
+Bruno Nicoletti
+
+ -->
+
+<!--
+<!DOCTYPE OfxImageEffectResource SYSTEM "ofx.dtd">
+ -->
+
+<OfxImageEffectResource>
+	<!--
+	Define the resource overrides for the plugin with the identifier 'someplugin'
+	-->
+	<OfxPlugin name="com.sonycreativesoftware:StarDotsPlugin">
+
+		<!--
+		Define the resouces overrides to be used for the host 'default' (or 'all' or 'com.sonycreativesoftware.vegas'
+		    in the locale 'fr-FR' (or 'de-DE' or 'es-ES' or 'ja-JP')
+			ofxHost="someHost"
+		-->
+		<OfxResourceSet ofxHost="default">
+
+			<!-- Set the user visible label on the plug-in -->
+			<OfxPropLabel>Checkerboard</OfxPropLabel>
+			
+			<OfxImageEffectPluginPropGrouping>OFX</OfxImageEffectPluginPropGrouping>
+			
+			<OfxPropPluginDescription>Star dots.</OfxPropPluginDescription>
+
+			<!--
+	        Define default overrides that apply in all contexts (unless specified in a specific context)
+			-->
+			<OfxImageEffectContext name="default">
+
+			</OfxImageEffectContext>
+
+			<!--
+	        Define default overrides that apply only in the generator context
+			-->
+			<OfxImageEffectContext name="OfxImageEffectContextGenerator">
+
+				<OfxParamTypeDouble name="Width">
+					<OfxPropLabel>Width</OfxPropLabel>
+				</OfxParamTypeDouble>
+				<OfxParamTypeDouble name="Height">
+					<OfxPropLabel>Height</OfxPropLabel>
+				</OfxParamTypeDouble>
+				<OfxParamTypeBoolean name="Square">
+					<OfxPropLabel>Square</OfxPropLabel>
+				</OfxParamTypeBoolean>
+				<OfxParamTypeRGBA name="Color1">
+					<OfxPropLabel>Color 1</OfxPropLabel>
+				</OfxParamTypeRGBA>
+				<OfxParamTypeRGBA name="Color2">
+					<OfxPropLabel>Color 2</OfxPropLabel>
+				</OfxParamTypeRGBA>
+				<OfxParamTypeDouble2D name="GridPosition">
+					<OfxPropLabel>Grid Position</OfxPropLabel>
+				</OfxParamTypeDouble2D>
+
+			</OfxImageEffectContext>
+
+		</OfxResourceSet>
+	</OfxPlugin>
+</OfxImageEffectResource>
